@@ -236,3 +236,4 @@ public class OpenWorldGame extends Application {
         minimap.setTranslateY(10);
     }
 }
+//
