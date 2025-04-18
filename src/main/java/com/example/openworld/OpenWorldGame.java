@@ -1,287 +1,238 @@
 package com.example.openworld;
 
+import com.google.gson.Gson;
+import com.google.gson.reflect.TypeToken;
 import javafx.animation.AnimationTimer;
 import javafx.application.Application;
 import javafx.scene.Scene;
 import javafx.scene.canvas.Canvas;
 import javafx.scene.canvas.GraphicsContext;
+import javafx.scene.control.*;
 import javafx.scene.input.KeyCode;
-import javafx.scene.layout.Pane;
+import javafx.scene.layout.*;
 import javafx.scene.paint.Color;
-import javafx.scene.shape.Polygon;
-import javafx.scene.shape.Shape;
-import javafx.stage.Screen;
+import javafx.scene.shape.Rectangle;
 import javafx.stage.Stage;
 
-import java.util.ArrayList;
+import java.io.FileReader;
+import java.io.FileWriter;
+import java.io.IOException;
+import java.lang.reflect.Type;
 import java.util.HashSet;
-import java.util.List;
 import java.util.Set;
 
 public class OpenWorldGame extends Application {
+    private static final int WORLD_WIDTH = 2000;
+    private static final int WORLD_HEIGHT = 2000;
 
-    // Увеличенный размер мира
-    private static final int WORLD_WIDTH = 4000;  // Было 2000
-    private static final int WORLD_HEIGHT = 3000; // Было 1500
+    private Pane gameRoot = new Pane();
+    private Pane uiRoot = new Pane();
 
-    private static final int PLAYER_SIZE = 40;
-    private static final int PLAYER_SPEED = 5;
+    private Rectangle player;
+    private double playerX = 400;
+    private double playerY = 300;
+    private double health = 1.0;
 
-    private double playerX = WORLD_WIDTH / 2.0;
-    private double playerY = WORLD_HEIGHT / 2.0;
+    private double cameraX = 0;
+    private double cameraY = 0;
 
-    private double camX = 0;
-    private double camY = 0;
+    private Set<KeyCode> keysPressed = new HashSet<>();
 
-    private final Set<KeyCode> pressedKeys = new HashSet<>();
+    private Label nameLabel = new Label("Player");
+    private ProgressBar healthBar = new ProgressBar(1.0);
+    private Canvas minimap = new Canvas(200, 150);
 
-    private double windowWidth;
-    private double windowHeight;
-
-    private final List<GameObject> objects = new ArrayList<>();
-
-    @Override
-    public void start(Stage primaryStage) {
-        var screenBounds = Screen.getPrimary().getVisualBounds();
-        windowWidth = screenBounds.getWidth();
-        windowHeight = screenBounds.getHeight();
-
-        Canvas canvas = new Canvas(windowWidth, windowHeight);
-        GraphicsContext gc = canvas.getGraphicsContext2D();
-
-        Pane root = new Pane(canvas);
-        Scene scene = new Scene(root, windowWidth, windowHeight);
-
-        scene.setOnKeyPressed(e -> pressedKeys.add(e.getCode()));
-        scene.setOnKeyReleased(e -> pressedKeys.remove(e.getCode()));
-
-        primaryStage.widthProperty().addListener((obs, oldVal, newVal) -> {
-            windowWidth = newVal.doubleValue();
-            canvas.setWidth(windowWidth);
-        });
-        primaryStage.heightProperty().addListener((obs, oldVal, newVal) -> {
-            windowHeight = newVal.doubleValue();
-            canvas.setHeight(windowHeight);
-        });
-
-        // Добавляем больше объектов, чтобы заполнить увеличенный мир
-        objects.add(new GameObject(new double[]{
-                0, 0,
-                30, 0,
-                30, 60,
-                0, 60
-        }, 500, 400, Color.DARKGREEN));
-
-        objects.add(new GameObject(new double[]{
-                0, 0,
-                40, 0,
-                40, 50,
-                0, 50
-        }, 800, 700, Color.DARKGREEN));
-
-        objects.add(new GameObject(new double[]{
-                0, 0,
-                50, 0,
-                50, 80,
-                0, 80
-        }, 1200, 300, Color.DARKGREEN));
-
-        objects.add(new GameObject(new double[]{
-                0, 0,
-                60, 0,
-                60, 40,
-                0, 40
-        }, 1600, 900, Color.DARKGREEN));
-
-        objects.add(new GameObject(new double[]{
-                0, 0,
-                30, 0,
-                30, 70,
-                0, 70
-        }, 400, 1100, Color.DARKGREEN));
-
-        // Новые объекты в расширенном мире
-        objects.add(new GameObject(new double[]{
-                0, 0,
-                50, 0,
-                50, 90,
-                0, 90
-        }, 2500, 1500, Color.DARKGREEN));
-
-        objects.add(new GameObject(new double[]{
-                0, 0,
-                70, 0,
-                70, 60,
-                0, 60
-        }, 3000, 2000, Color.DARKGREEN));
-
-        objects.add(new GameObject(new double[]{
-                0, 0,
-                40, 0,
-                40, 80,
-                0, 80
-        }, 3500, 2500, Color.DARKGREEN));
-
-        objects.add(new GameObject(new double[]{
-                0, 0,
-                60, 0,
-                60, 70,
-                0, 70
-        }, 3800, 2800, Color.DARKGREEN));
-
-        new AnimationTimer() {
-            @Override
-            public void handle(long now) {
-                update();
-                render(gc);
-            }
-        }.start();
-
-        primaryStage.setTitle("JavaFX Open World Game — Увеличенный мир");
-        primaryStage.setScene(scene);
-        primaryStage.setX(screenBounds.getMinX());
-        primaryStage.setY(screenBounds.getMinY());
-        primaryStage.setWidth(windowWidth);
-        primaryStage.setHeight(windowHeight);
-        primaryStage.setFullScreen(true);
-        primaryStage.show();
-
-        canvas.requestFocus();
-    }
-
-    private void update() {
-        double nextX = playerX;
-        double nextY = playerY;
-
-        if (pressedKeys.contains(KeyCode.W)) {
-            nextY -= PLAYER_SPEED;
-        }
-        if (pressedKeys.contains(KeyCode.S)) {
-            nextY += PLAYER_SPEED;
-        }
-        if (pressedKeys.contains(KeyCode.A)) {
-            nextX -= PLAYER_SPEED;
-        }
-        if (pressedKeys.contains(KeyCode.D)) {
-            nextX += PLAYER_SPEED;
-        }
-
-        if (!isColliding(nextX, nextY)) {
-            if (nextX >= 0 && nextX <= WORLD_WIDTH - PLAYER_SIZE &&
-                    nextY >= 0 && nextY <= WORLD_HEIGHT - PLAYER_SIZE) {
-                playerX = nextX;
-                playerY = nextY;
-            }
-        }
-
-        double targetCamX = playerX - windowWidth / 2.0;
-        double targetCamY = playerY - windowHeight / 2.0;
-
-        targetCamX = clamp(targetCamX, 0, WORLD_WIDTH - windowWidth);
-        targetCamY = clamp(targetCamY, 0, WORLD_HEIGHT - windowHeight);
-
-        double lerpFactor = 0.1;
-        camX += (targetCamX - camX) * lerpFactor;
-        camY += (targetCamY - camY) * lerpFactor;
-    }
-
-    private boolean isColliding(double x, double y) {
-        Polygon playerPoly = createPlayerPolygon(x, y);
-
-        for (GameObject obj : objects) {
-            Shape intersection = Shape.intersect(playerPoly, obj.getPolygon());
-            if (intersection.getBoundsInLocal().getWidth() != -1) {
-                return true;
-            }
-        }
-        return false;
-    }
-
-    private Polygon createPlayerPolygon(double x, double y) {
-        return new Polygon(
-                x, y,
-                x + PLAYER_SIZE, y,
-                x + PLAYER_SIZE, y + PLAYER_SIZE,
-                x, y + PLAYER_SIZE
-        );
-    }
-
-    private void render(GraphicsContext gc) {
-        gc.setFill(Color.LIGHTGREEN);
-        gc.fillRect(0, 0, windowWidth, windowHeight);
-
-        double scaleX = windowWidth / WORLD_WIDTH;
-        double scaleY = windowHeight / WORLD_HEIGHT;
-        double scale = Math.min(scaleX, scaleY);
-
-        gc.save();
-        gc.scale(scale, scale);
-
-        gc.setStroke(Color.GRAY);
-        for (int x = 0; x < WORLD_WIDTH; x += 100) {
-            gc.strokeLine(x - camX, 0 - camY, x - camX, WORLD_HEIGHT - camY);
-        }
-        for (int y = 0; y < WORLD_HEIGHT; y += 100) {
-            gc.strokeLine(0 - camX, y - camY, WORLD_WIDTH - camX, y - camY);
-        }
-
-        for (GameObject obj : objects) {
-            obj.render(gc, camX, camY);
-        }
-
-        gc.setFill(Color.BLUE);
-        gc.fillRect(playerX - camX, playerY - camY, PLAYER_SIZE, PLAYER_SIZE);
-
-        gc.restore();
-    }
-
-    private double clamp(double val, double min, double max) {
-        if (val < min) return min;
-        if (val > max) return max;
-        return val;
-    }
-
-    private static class GameObject {
-        private final Polygon polygon;
-        private final Color color;
-        private final double offsetX;
-        private final double offsetY;
-
-        public GameObject(double[] points, double offsetX, double offsetY, Color color) {
-            this.polygon = new Polygon(points);
-            this.offsetX = offsetX;
-            this.offsetY = offsetY;
-            this.color = color;
-            this.polygon.setTranslateX(offsetX);
-            this.polygon.setTranslateY(offsetY);
-        }
-
-        public Polygon getPolygon() {
-            return polygon;
-        }
-
-        public void render(GraphicsContext gc, double camX, double camY) {
-            gc.setFill(color);
-
-            double[] points = polygon.getPoints().stream().mapToDouble(Double::doubleValue).toArray();
-
-            double tx = offsetX - camX;
-            double ty = offsetY - camY;
-
-            double[] xPoints = new double[points.length / 2];
-            double[] yPoints = new double[points.length / 2];
-            for (int i = 0, j = 0; i < points.length; i += 2, j++) {
-                xPoints[j] = points[i] + tx;
-                yPoints[j] = points[i + 1] + ty;
-            }
-
-            gc.fillPolygon(xPoints, yPoints, xPoints.length);
-            gc.setStroke(Color.BLACK);
-            gc.strokePolygon(xPoints, yPoints, xPoints.length);
-        }
-    }
+    private BorderPane root = new BorderPane();
+    private ComboBox<String> resolutionDropdown = new ComboBox<>();
+    private int WIDTH = 800;
+    private int HEIGHT = 600;
 
     public static void main(String[] args) {
         launch(args);
+    }
+
+    @Override
+    public void start(Stage primaryStage) {
+        StackPane stack = new StackPane();
+
+        Canvas canvas = new Canvas(WIDTH, HEIGHT);
+        GraphicsContext gc = canvas.getGraphicsContext2D();
+        stack.getChildren().add(canvas);
+        root.setCenter(stack);
+
+        player = new Rectangle(40, 40, Color.BLUE);
+        gameRoot.getChildren().add(player);
+
+        VBox ui = new VBox(10);
+        ui.setTranslateX(10);
+        ui.setTranslateY(10);
+        nameLabel.setStyle("-fx-font-size: 16px; -fx-text-fill: white;");
+        healthBar.setPrefWidth(200);
+        ui.getChildren().addAll(nameLabel, healthBar);
+        uiRoot.getChildren().add(ui);
+
+        minimap.setTranslateX(WIDTH - 210);
+        minimap.setTranslateY(10);
+        uiRoot.getChildren().add(minimap);
+
+        stack.getChildren().addAll(gameRoot, uiRoot);
+
+        MenuBar menuBar = new MenuBar();
+        Menu gameMenu = new Menu("Game");
+        MenuItem newGame = new MenuItem("New Game");
+        MenuItem exitGame = new MenuItem("Exit");
+        exitGame.setOnAction(e -> primaryStage.close());
+        newGame.setOnAction(e -> loadGame());
+        gameMenu.getItems().addAll(newGame, exitGame);
+
+        Menu settingsMenu = new Menu("Settings");
+        MenuItem graphics = new MenuItem("Graphics");
+        graphics.setOnAction(e -> showGraphicsSettings(primaryStage, canvas));
+        settingsMenu.getItems().addAll(graphics);
+
+        menuBar.getMenus().addAll(gameMenu, settingsMenu);
+        root.setTop(menuBar);
+
+        Scene scene = new Scene(root, WIDTH, HEIGHT);
+        scene.setOnKeyPressed(e -> keysPressed.add(e.getCode()));
+        scene.setOnKeyReleased(e -> keysPressed.remove(e.getCode()));
+
+        primaryStage.setTitle("Open World Game");
+        primaryStage.setScene(scene);
+        primaryStage.setOnCloseRequest(e -> saveGame());
+        primaryStage.show();
+
+        // Обновляем размеры UI-элементов при изменении размера окна
+        scene.widthProperty().addListener((obs, oldWidth, newWidth) -> adjustUI(newWidth.doubleValue(), scene.getHeight()));
+        scene.heightProperty().addListener((obs, oldHeight, newHeight) -> adjustUI(scene.getWidth(), newHeight.doubleValue()));
+
+        AnimationTimer timer = new AnimationTimer() {
+            public void handle(long now) {
+                update();
+                render(gc, canvas);
+            }
+        };
+        timer.start();
+    }
+
+    private void update() {
+        double speed = 5;
+        if (keysPressed.contains(KeyCode.W)) playerY -= speed;
+        if (keysPressed.contains(KeyCode.S)) playerY += speed;
+        if (keysPressed.contains(KeyCode.A)) playerX -= speed;
+        if (keysPressed.contains(KeyCode.D)) playerX += speed;
+
+        // Ограничение игрока в пределах карты
+        playerX = Math.max(0, Math.min(playerX, WORLD_WIDTH - player.getWidth()));
+        playerY = Math.max(0, Math.min(playerY, WORLD_HEIGHT - player.getHeight()));
+
+        // Плавная камера
+        double targetCamX = playerX - WIDTH / 2.0 + player.getWidth() / 2.0;
+        double targetCamY = playerY - HEIGHT / 2.0 + player.getHeight() / 2.0;
+        cameraX += (targetCamX - cameraX) * 0.1;
+        cameraY += (targetCamY - cameraY) * 0.1;
+
+        // Ограничение камеры
+        cameraX = Math.max(0, Math.min(cameraX, WORLD_WIDTH - WIDTH));
+        cameraY = Math.max(0, Math.min(cameraY, WORLD_HEIGHT - HEIGHT));
+
+        player.setTranslateX(playerX - cameraX);
+        player.setTranslateY(playerY - cameraY);
+    }
+
+    private void render(GraphicsContext gc, Canvas canvas) {
+        gc.clearRect(0, 0, canvas.getWidth(), canvas.getHeight());
+
+        gc.setFill(Color.GREEN);
+        gc.fillRect(-cameraX, -cameraY, WORLD_WIDTH, WORLD_HEIGHT);
+
+        gc.setFill(Color.RED);
+        gc.fillRect(playerX - cameraX, playerY - cameraY, player.getWidth(), player.getHeight());
+
+        GraphicsContext miniGC = minimap.getGraphicsContext2D();
+        miniGC.setFill(Color.DARKGRAY);
+        miniGC.fillRect(0, 0, 200, 150);
+
+        double scaleX = 200.0 / WORLD_WIDTH;
+        double scaleY = 150.0 / WORLD_HEIGHT;
+
+        miniGC.setFill(Color.BLUE);
+        miniGC.fillOval(playerX * scaleX, playerY * scaleY, 5, 5);
+
+        healthBar.setProgress(health);
+    }
+
+    private void showGraphicsSettings(Stage primaryStage, Canvas canvas) {
+        Stage settingsStage = new Stage();
+        VBox settingsLayout = new VBox(10);
+        settingsLayout.setStyle("-fx-padding: 20px;");
+
+        resolutionDropdown.getItems().addAll("800x600", "1024x768", "1280x720", "1920x1080");
+        resolutionDropdown.setValue("800x600");
+
+        Button applyButton = new Button("Apply");
+        applyButton.setOnAction(e -> {
+            String selectedResolution = resolutionDropdown.getValue();
+            if (selectedResolution != null) {
+                String[] parts = selectedResolution.split("x");
+                int newWidth = Integer.parseInt(parts[0]);
+                int newHeight = Integer.parseInt(parts[1]);
+                WIDTH = newWidth;
+                HEIGHT = newHeight;
+                primaryStage.setWidth(newWidth);
+                primaryStage.setHeight(newHeight);
+                canvas.setWidth(newWidth);
+                canvas.setHeight(newHeight);
+            }
+            settingsStage.close();
+        });
+
+        settingsLayout.getChildren().addAll(new Label("Resolution:"), resolutionDropdown, applyButton);
+        Scene settingsScene = new Scene(settingsLayout);
+        settingsStage.setScene(settingsScene);
+        settingsStage.setTitle("Graphics Settings");
+        settingsStage.show();
+    }
+
+    private void saveGame() {
+        GameState state = new GameState();
+        state.playerX = this.playerX;
+        state.playerY = this.playerY;
+
+        try (FileWriter writer = new FileWriter("save.json")) {
+            Gson gson = new Gson();
+            gson.toJson(state, writer);
+        } catch (IOException e) {
+            e.printStackTrace();
+        }
+    }
+
+    private void loadGame() {
+        try (FileReader reader = new FileReader("save.json")) {
+            Gson gson = new Gson();
+            Type type = new TypeToken<GameState>() {}.getType();
+            GameState state = gson.fromJson(reader, type);
+            this.playerX = state.playerX;
+            this.playerY = state.playerY;
+        } catch (IOException e) {
+            e.printStackTrace();
+        }
+    }
+
+    private static class GameState {
+        double playerX;
+        double playerY;
+    }
+
+    // Метод для адаптивного позиционирования UI-элементов
+    private void adjustUI(double newWidth, double newHeight) {
+        nameLabel.setTranslateX(newWidth * 0.02);
+        nameLabel.setTranslateY(newHeight * 0.02);
+
+        healthBar.setTranslateX(newWidth * 0.02);
+        healthBar.setTranslateY(newHeight * 0.05);
+
+        minimap.setTranslateX(newWidth - 210);
+        minimap.setTranslateY(10);
     }
 }
